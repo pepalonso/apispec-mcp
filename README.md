@@ -19,7 +19,7 @@ Add to `.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "swagger-mcp": {
+    "apispec-mcp": {
       "command": "npx",
       "args": ["-y", "apispec-mcp"]
     }
@@ -67,9 +67,9 @@ Example URLs:
 
 ### Spec Loading
 
-| Tool        | Description                                                                                                                           |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `load_spec` | Fetch and parse an OpenAPI spec. Prompts the user for the URL — the agent should not supply it. Must be called before any other tool. |
+| Tool        | Description |
+|-------------|-------------|
+| `load_spec` | Fetch and parse an OpenAPI spec. Pass the URL if you have it, or omit it and the user will be prompted to enter it. Must be called before any other tool. |
 
 ### Core Discovery
 

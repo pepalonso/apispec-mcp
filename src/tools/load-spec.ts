@@ -5,10 +5,10 @@ import { loadSpec } from "../spec-store.js";
 const LOAD_SPEC_DESCRIPTION =
   "Fetch, parse, and dereference an OpenAPI/Swagger spec. Must be called before any other tool. " +
   "Supports Swagger 2.0, OpenAPI 3.0, and 3.1 in JSON or YAML. " +
-  "IMPORTANT: Do not pass the `url` argument yourself. Omit it so the user can enter the spec URL " +
-  "(interactive prompt when supported). Do not guess URLs and do not fetch OpenAPI specs with web or " +
-  "browser tools; only this tool loads the spec. " +
-  "Only pass `url` if the client does not support interactive entry and the user has pasted the URL in chat.";
+  "If you already have the spec URL, pass it as `url`. " +
+  "If you do not have the URL, do NOT ask the user for it — just call this tool without `url` and " +
+  "the user will be prompted to enter it. Never guess URLs and never fetch OpenAPI specs with web or " +
+  "browser tools; only this tool loads the spec.";
 
 const FALLBACK_NO_ELICITATION =
   "Interactive URL entry is not available in this MCP client. " +
@@ -33,8 +33,8 @@ export function registerLoadSpec(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            "Omit this when calling the tool. Only set it after the user pasted a URL in chat and " +
-              "interactive entry is unavailable.",
+            "The spec URL or local file path. Pass it if you already have it. " +
+            "If you don't have it, omit this — the user will be prompted to enter it.",
           ),
       },
     },

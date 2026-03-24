@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerLoadSpec } from "./tools/load-spec.js";
@@ -8,8 +9,8 @@ import { registerAuthAndServerTools } from "./tools/auth-and-servers.js";
 import { registerExampleTools } from "./tools/examples.js";
 
 const server = new McpServer({
-  name: "swagger-mcp",
-  version: "1.0.0",
+  name: "apispec-mcp",
+  version: "0.1.0",
 });
 
 registerLoadSpec(server);
