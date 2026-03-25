@@ -1,6 +1,6 @@
 {
   "name": "apispec-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server for exploring OpenAPI/Swagger specifications without loading the full JSON into the agent context",
   "type": "module",
   "main": "dist/index.js",

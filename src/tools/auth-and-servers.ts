@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { safeStringify } from "../utils/safe-stringify.js";
 import {
   getAllEndpoints,
   getOperation,
@@ -35,15 +36,11 @@ export function registerAuthAndServerTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                {
+              text: safeStringify({
                   securitySchemes: schemes,
                   globalSecurity,
                   endpointSpecificSecurity: endpointSecurity,
-                },
-                null,
-                2,
-              ),
+                }),
             },
           ],
         };
@@ -70,7 +67,7 @@ export function registerAuthAndServerTools(server: McpServer): void {
         const servers = getServers();
         return {
           content: [
-            { type: "text", text: JSON.stringify({ servers }, null, 2) },
+            { type: "text", text: safeStringify({ servers }) },
           ],
         };
       } catch (err) {

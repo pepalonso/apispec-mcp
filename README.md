@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/apispec-mcp)](https://www.npmjs.com/package/apispec-mcp)
 [![license](https://img.shields.io/npm/l/apispec-mcp)](LICENSE)
 
-An MCP server that lets AI agents explore and understand OpenAPI/Swagger specifications. Point it at any spec URL and use 11 tools to browse endpoints, schemas, auth, and generate examples — without the agent ever loading the raw JSON into context.
+An MCP server that lets AI agents explore and understand OpenAPI/Swagger specifications. Point it at any spec URL and use 12 tools to browse endpoints, schemas, auth, and generate examples — without the agent ever loading the raw JSON into context.
 
 Supports Swagger 2.0, OpenAPI 3.0, and OpenAPI 3.1 (JSON or YAML).
 
@@ -73,19 +73,20 @@ Example URLs:
 
 ### Core Discovery
 
-| Tool                  | Params           | Description                                                             |
-| --------------------- | ---------------- | ----------------------------------------------------------------------- |
-| `get_endpoints`       | --               | List all endpoints grouped by tag, with HTTP method, path, and summary. |
-| `get_endpoint_detail` | `path`, `method` | Full operation detail: parameters, request body, responses, auth.       |
-| `get_schemas`         | --               | List all named schemas with type and property count.                    |
-| `get_schema_detail`   | `schema_name`    | Full expanded schema with all `$ref`s resolved.                         |
+| Tool | Params | Description |
+|------|--------|-------------|
+| `get_endpoints` | `path_prefix?`, `tag?`, `limit?`, `offset?` | List endpoints grouped by tag, or filter by path prefix / tag with pagination. |
+| `get_endpoint_detail` | `path`, `method` | Full operation detail: parameters, request body, responses, auth. |
+| `get_endpoint_parameters` | `path`, `method` | Just the parameters (path, query, header, cookie) — lightweight fallback when detail is too large. |
+| `get_schemas` | -- | List all named schemas with type and property count. |
+| `get_schema_detail` | `schema_name` | Full expanded schema with all `$ref`s resolved. |
 
 ### Search
 
-| Tool                   | Params  | Description                                                       |
-| ---------------------- | ------- | ----------------------------------------------------------------- |
-| `search_endpoints`     | `query` | Full-text search across paths, summaries, descriptions, and tags. |
-| `get_endpoints_by_tag` | `tag`   | Filter endpoints by their OpenAPI tag.                            |
+| Tool | Params | Description |
+|------|--------|-------------|
+| `search_endpoints` | `query`, `limit?`, `offset?` | Multi-keyword ranked search. Words match independently; path matches score highest. |
+| `get_endpoints_by_tag` | `tag`, `limit?`, `offset?` | Filter endpoints by tag with pagination. |
 
 ### Context & Auth
 

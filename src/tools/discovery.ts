@@ -9,6 +9,7 @@ import {
   type EndpointInfo,
 } from "../spec-store.js";
 import type { OpenAPIV3 } from "openapi-types";
+import { safeStringify } from "../utils/safe-stringify.js";
 
 function groupByTag(endpoints: EndpointInfo[]): Record<string, EndpointInfo[]> {
   const grouped: Record<string, EndpointInfo[]> = {};
@@ -22,35 +23,98 @@ function groupByTag(endpoints: EndpointInfo[]): Record<string, EndpointInfo[]> {
   return grouped;
 }
 
+function formatEndpoint(ep: EndpointInfo) {
+  return {
+    method: ep.method.toUpperCase(),
+    path: ep.path,
+    ...(ep.summary && { summary: ep.summary }),
+    ...(ep.deprecated && { deprecated: true }),
+  };
+}
+
+function paginate<T>(items: T[], limit: number, offset: number) {
+  return {
+    totalCount: items.length,
+    offset,
+    limit,
+    items: items.slice(offset, offset + limit),
+  };
+}
+
 export function registerDiscoveryTools(server: McpServer): void {
   server.registerTool(
     "get_endpoints",
     {
       title: "Get Endpoints",
       description:
-        "List all available endpoints grouped by tag/domain, with HTTP method, path, and summary. " +
-        "Gives a quick map of the entire API surface.",
+        "List endpoints with optional filtering and pagination. " +
+        "Without filters returns all endpoints grouped by tag. " +
+        "With filters returns a flat paginated list.",
+      inputSchema: {
+        path_prefix: z
+          .string()
+          .optional()
+          .describe("Filter to endpoints whose path starts with this prefix, e.g. /api/v2/resources"),
+        tag: z
+          .string()
+          .optional()
+          .describe("Filter to endpoints with this tag (case-insensitive)"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max results to return (default 100, max 500)"),
+        offset: z
+          .number()
+          .optional()
+          .describe("Number of results to skip for pagination (default 0)"),
+      },
     },
-    async () => {
+    async ({ path_prefix, tag, limit, offset }) => {
       try {
-        const endpoints = getAllEndpoints();
-        const grouped = groupByTag(endpoints);
+        let endpoints = getAllEndpoints();
+        const hasFilters = path_prefix || tag;
 
-        const result: Record<
-          string,
-          { method: string; path: string; summary?: string; deprecated?: boolean }[]
-        > = {};
-        for (const [tag, eps] of Object.entries(grouped)) {
-          result[tag] = eps.map((ep) => ({
-            method: ep.method.toUpperCase(),
-            path: ep.path,
-            ...(ep.summary && { summary: ep.summary }),
-            ...(ep.deprecated && { deprecated: true }),
-          }));
+        if (path_prefix) {
+          const prefix = path_prefix.toLowerCase();
+          endpoints = endpoints.filter((ep) =>
+            ep.path.toLowerCase().startsWith(prefix),
+          );
+        }
+        if (tag) {
+          const tagLower = tag.toLowerCase();
+          endpoints = endpoints.filter((ep) =>
+            ep.tags.some((t) => t.toLowerCase() === tagLower),
+          );
+        }
+
+        if (hasFilters || limit || offset) {
+          const lim = Math.min(limit ?? 100, 500);
+          const off = offset ?? 0;
+          const page = paginate(endpoints, lim, off);
+          return {
+            content: [
+              {
+                type: "text",
+                text: safeStringify({
+                  totalCount: page.totalCount,
+                  offset: page.offset,
+                  limit: page.limit,
+                  returned: page.items.length,
+                  endpoints: page.items.map(formatEndpoint),
+                }),
+              },
+            ],
+          };
+        }
+
+        const grouped = groupByTag(endpoints);
+        const result: Record<string, ReturnType<typeof formatEndpoint>[]> = {};
+        for (const [t, eps] of Object.entries(grouped)) {
+          result[t] = eps.map(formatEndpoint);
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [{ type: "text", text: safeStringify(result) }],
         };
       } catch (err) {
         return {
@@ -123,7 +187,6 @@ export function registerDiscoveryTools(server: McpServer): void {
           ...operation,
         };
 
-        // Merge path-level parameters
         if (pathItem && "parameters" in pathItem && pathItem.parameters) {
           const opParams = (operation.parameters as unknown[]) ?? [];
           detail.parameters = [
@@ -132,7 +195,6 @@ export function registerDiscoveryTools(server: McpServer): void {
           ];
         }
 
-        // Include security from operation level or global
         if (!operation.security) {
           const globalSec = (spec as Record<string, unknown>).security;
           if (globalSec) {
@@ -141,7 +203,87 @@ export function registerDiscoveryTools(server: McpServer): void {
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(detail, null, 2) }],
+          content: [{ type: "text", text: safeStringify(detail) }],
+        };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text", text: err instanceof Error ? err.message : String(err) },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_endpoint_parameters",
+    {
+      title: "Get Endpoint Parameters",
+      description:
+        "Return only the parameters (path, query, header, cookie) for an endpoint. " +
+        "Lighter than get_endpoint_detail — useful when you only need param names, types, and locations, " +
+        "or when get_endpoint_detail fails on large/circular schemas.",
+      inputSchema: {
+        path: z.string().describe("The endpoint path, e.g. /pets/{petId}"),
+        method: z
+          .string()
+          .describe("HTTP method: get, post, put, delete, patch, etc."),
+      },
+    },
+    async ({ path, method }) => {
+      try {
+        const operation = getOperation(path, method);
+        if (!operation) {
+          return {
+            content: [
+              { type: "text", text: `No ${method.toUpperCase()} operation at "${path}".` },
+            ],
+            isError: true,
+          };
+        }
+
+        const pathItem = getPathItem(path);
+        const pathParams = (pathItem && "parameters" in pathItem && pathItem.parameters)
+          ? (pathItem.parameters as Record<string, unknown>[])
+          : [];
+        const opParams = (operation.parameters as Record<string, unknown>[] | undefined) ?? [];
+
+        const seen = new Set<string>();
+        const merged: Record<string, unknown>[] = [];
+        for (const p of [...opParams, ...pathParams]) {
+          const key = `${p.in}:${p.name}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const param: Record<string, unknown> = {
+            name: p.name,
+            in: p.in,
+            required: p.required ?? false,
+          };
+          if (p.description) param.description = p.description;
+          if (p.schema) param.schema = p.schema;
+          merged.push(param);
+        }
+
+        const grouped: Record<string, unknown[]> = {};
+        for (const p of merged) {
+          const loc = p.in as string;
+          if (!grouped[loc]) grouped[loc] = [];
+          grouped[loc].push(p);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: safeStringify({
+                method: method.toUpperCase(),
+                path,
+                parameterCount: merged.length,
+                parameters: grouped,
+              }),
+            },
+          ],
         };
       } catch (err) {
         return {

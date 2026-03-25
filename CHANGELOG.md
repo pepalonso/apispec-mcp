@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-03-24
 
+### Added
+- `get_endpoint_parameters` tool — returns only parameters (path, query, header, cookie) without deep schemas, reliable fallback when `get_endpoint_detail` hits circular refs
+- Pagination (`limit`, `offset`) on `get_endpoints`, `get_endpoints_by_tag`, and `search_endpoints`
+- `path_prefix` and `tag` filters on `get_endpoints`
+- Multi-token ranked search — words are matched independently (OR), results scored with path matches weighted highest
+
 ### Changed
 - Stable release
 - `load_spec` now accepts a `url` argument when the agent already has it, and falls back to prompting the user when it doesn't
 - Improved tool description to clarify when the agent should or should not supply the URL
+
+### Fixed
+- Circular reference crash (`Converting circular structure to JSON`) on specs with self-referencing schemas — all tools now use `safeStringify`
 
 ## [0.1.1] - 2026-03-24
 

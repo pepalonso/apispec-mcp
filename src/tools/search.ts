@@ -1,16 +1,30 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getAllEndpoints, type EndpointInfo } from "../spec-store.js";
+import { safeStringify } from "../utils/safe-stringify.js";
 
-function matchesQuery(ep: EndpointInfo, query: string): boolean {
-  const q = query.toLowerCase();
-  return (
-    ep.path.toLowerCase().includes(q) ||
-    (ep.summary?.toLowerCase().includes(q) ?? false) ||
-    (ep.description?.toLowerCase().includes(q) ?? false) ||
-    (ep.operationId?.toLowerCase().includes(q) ?? false) ||
-    ep.tags.some((t) => t.toLowerCase().includes(q))
-  );
+interface ScoredEndpoint {
+  ep: EndpointInfo;
+  score: number;
+}
+
+function scoreEndpoint(ep: EndpointInfo, tokens: string[]): number {
+  let score = 0;
+  const path = ep.path.toLowerCase();
+  const summary = ep.summary?.toLowerCase() ?? "";
+  const description = ep.description?.toLowerCase() ?? "";
+  const operationId = ep.operationId?.toLowerCase() ?? "";
+  const tags = ep.tags.map((t) => t.toLowerCase());
+
+  for (const token of tokens) {
+    if (path.includes(token)) score += 10;
+    if (operationId.includes(token)) score += 6;
+    if (summary.includes(token)) score += 4;
+    if (tags.some((t) => t.includes(token))) score += 3;
+    if (description.includes(token)) score += 1;
+  }
+
+  return score;
 }
 
 export function registerSearchTools(server: McpServer): void {
@@ -19,22 +33,54 @@ export function registerSearchTools(server: McpServer): void {
     {
       title: "Search Endpoints",
       description:
-        "Full-text search across endpoint paths, summaries, descriptions, operationIds, and tags. " +
-        'Useful when you don\'t know the exact path but know what you\'re looking for (e.g. "payment", "booking").',
+        "Search endpoints by keywords. Multi-word queries match each word independently (OR). " +
+        "Results are ranked: path matches score highest, then operationId, summary, tags, and description. " +
+        "Returns top results with pagination.",
       inputSchema: {
         query: z
           .string()
-          .describe("Search term to match against endpoint metadata"),
+          .describe("One or more search keywords separated by spaces"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max results to return (default 50, max 200)"),
+        offset: z
+          .number()
+          .optional()
+          .describe("Number of results to skip for pagination (default 0)"),
       },
     },
-    async ({ query }) => {
+    async ({ query, limit, offset }) => {
       try {
         const endpoints = getAllEndpoints();
-        const matches = endpoints.filter((ep) => matchesQuery(ep, query));
+        const tokens = query
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((t) => t.length > 0);
 
-        const results = matches.map((ep) => ({
+        if (tokens.length === 0) {
+          return {
+            content: [{ type: "text", text: "Empty search query." }],
+            isError: true,
+          };
+        }
+
+        const scored: ScoredEndpoint[] = [];
+        for (const ep of endpoints) {
+          const s = scoreEndpoint(ep, tokens);
+          if (s > 0) scored.push({ ep, score: s });
+        }
+
+        scored.sort((a, b) => b.score - a.score);
+
+        const lim = Math.min(limit ?? 50, 200);
+        const off = offset ?? 0;
+        const page = scored.slice(off, off + lim);
+
+        const results = page.map(({ ep, score }) => ({
           method: ep.method.toUpperCase(),
           path: ep.path,
+          score,
           ...(ep.summary && { summary: ep.summary }),
           ...(ep.operationId && { operationId: ep.operationId }),
           tags: ep.tags,
@@ -44,15 +90,14 @@ export function registerSearchTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                {
-                  query,
-                  matchCount: results.length,
-                  results,
-                },
-                null,
-                2,
-              ),
+              text: safeStringify({
+                query,
+                totalMatches: scored.length,
+                offset: off,
+                limit: lim,
+                returned: results.length,
+                results,
+              }),
             },
           ],
         };
@@ -72,14 +117,23 @@ export function registerSearchTools(server: McpServer): void {
     {
       title: "Get Endpoints by Tag",
       description:
-        'Filter endpoints by their OpenAPI tag group (e.g. all endpoints under "Flights" or "Users").',
+        "Filter endpoints by their OpenAPI tag group with pagination. " +
+        'Example: all endpoints under "Flights" or "Users".',
       inputSchema: {
         tag: z
           .string()
           .describe("The tag name to filter by (case-insensitive)"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max results to return (default 50, max 500)"),
+        offset: z
+          .number()
+          .optional()
+          .describe("Number of results to skip for pagination (default 0)"),
       },
     },
-    async ({ tag }) => {
+    async ({ tag, limit, offset }) => {
       try {
         const endpoints = getAllEndpoints();
         const tagLower = tag.toLowerCase();
@@ -102,7 +156,11 @@ export function registerSearchTools(server: McpServer): void {
           };
         }
 
-        const results = matches.map((ep) => ({
+        const lim = Math.min(limit ?? 50, 500);
+        const off = offset ?? 0;
+        const page = matches.slice(off, off + lim);
+
+        const results = page.map((ep) => ({
           method: ep.method.toUpperCase(),
           path: ep.path,
           ...(ep.summary && { summary: ep.summary }),
@@ -113,11 +171,14 @@ export function registerSearchTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                { tag, count: results.length, endpoints: results },
-                null,
-                2,
-              ),
+              text: safeStringify({
+                tag,
+                totalCount: matches.length,
+                offset: off,
+                limit: lim,
+                returned: results.length,
+                endpoints: results,
+              }),
             },
           ],
         };

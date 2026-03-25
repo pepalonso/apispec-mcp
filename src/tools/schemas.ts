@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getSchemaNames, getSchemaByName } from "../spec-store.js";
+import { safeStringify } from "../utils/safe-stringify.js";
 
 export function registerSchemaTools(server: McpServer): void {
   server.registerTool(
@@ -36,11 +37,7 @@ export function registerSchemaTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                { count: names.length, schemas: summaries },
-                null,
-                2,
-              ),
+              text: safeStringify({ count: names.length, schemas: summaries }),
             },
           ],
         };
@@ -95,11 +92,7 @@ export function registerSchemaTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                { name: schema_name, schema },
-                null,
-                2,
-              ),
+              text: safeStringify({ name: schema_name, schema }),
             },
           ],
         };

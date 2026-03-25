@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getOperation, getSpec, isV2 } from "../spec-store.js";
 import { generateExample } from "../utils/example-generator.js";
+import { safeStringify } from "../utils/safe-stringify.js";
 
 function extractRequestBodySchema(
   operation: Record<string, unknown>,
@@ -126,16 +127,12 @@ export function registerExampleTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                {
+              text: safeStringify({
                   method: method.toUpperCase(),
                   path,
                   contentType: ct,
                   example,
-                },
-                null,
-                2,
-              ),
+                }),
             },
           ],
         };
@@ -213,17 +210,13 @@ export function registerExampleTools(server: McpServer): void {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                {
+              text: safeStringify({
                   method: method.toUpperCase(),
                   path,
                   statusCode: sc,
                   contentType: ct,
                   example,
-                },
-                null,
-                2,
-              ),
+                }),
             },
           ],
         };
